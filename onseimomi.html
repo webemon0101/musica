@@ -2,73 +2,144 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>YouTube音声のみ＋音声認識UI</title>
+  <title>軽量版YouTube音声タイピング</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; text-align: center; background: #f0f4f8; }
-    iframe { display: none; } /* 映像を非表示にして軽くする */
-    input, button {
-      font-size: 18px;
-      padding: 8px;
-      width: 80%;
-      margin: 10px auto;
+    body {
+      display: flex;
+      font-family: sans-serif;
+      margin: 0;
+      background-color: #f4f4f4;
+    }
+    #sidebar {
+      width: 180px;
+      background: #e3e8ef;
+      padding: 10px;
+      overflow-y: auto;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    }
+    #sidebar img {
+      width: 100%;
+      margin-bottom: 10px;
       border-radius: 6px;
-      border: 1px solid #ccc;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    #sidebar img:hover {
+      transform: scale(1.05);
+    }
+    #main {
+      flex: 1;
+      padding: 20px;
+      text-align: center;
     }
     #recognized, #resultList {
       font-size: 18px;
-      margin: 10px auto;
-      max-width: 600px;
       background: #fff;
       padding: 10px;
+      margin: 10px auto;
+      max-width: 640px;
       border-radius: 8px;
-      box-shadow: 0 0 5px rgba(0,0,0,0.1);
-      text-align: left;
+      box-shadow: 0 0 4px rgba(0,0,0,0.1);
       white-space: pre-wrap;
+      text-align: left;
+    }
+    #typingInput {
+      font-size: 18px;
+      padding: 8px;
+      width: 80%;
+      max-width: 500px;
+      border-radius: 6px;
+      border: 1px solid #aaa;
+      margin: 10px 0;
+    }
+    iframe {
+      display: none;
+    }
+    button {
+      font-size: 16px;
+      padding: 8px 16px;
+      margin-top: 10px;
+      border-radius: 6px;
+      background-color: #d9534f;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #c9302c;
     }
   </style>
 </head>
 <body>
-  <h1>🎧 音声のみでタイピング練習</h1>
-  <p>🔊 YouTube音声を流して、聞き取った内容を入力してください</p>
-  <iframe id="ytplayer" src="https://www.youtube.com/embed/M7lc1UVf-VE?autoplay=1" allow="autoplay" allowfullscreen></iframe>
-  <div id="recognized">🗣️ 認識中…</div>
-  <input type="text" id="typingInput" placeholder="Enterで判定"><br>
-  <div id="resultList">📋 結果：</div>
+  <div id="sidebar"></div>
+  <div id="main">
+    <h1>🎧 軽量YouTube音声タイピング</h1>
+    <iframe id="ytplayer" allow="autoplay" allowfullscreen></iframe>
+    <button onclick="stopVideo()">■ 再生停止</button>
+    <div id="recognized">🗣️ 認識中…</div>
+    <input type="text" id="typingInput" placeholder="Enterで判定"><br>
+    <div id="resultList">📋 結果：</div>
+  </div>
 
   <script>
+    const videoIds = ["CoUunIuUW1c", "Oezmni8SklA", "Jj1_mfUzjOs", "W-0lSiV-H7k"];
+    const sidebar = document.getElementById("sidebar");
+    const player = document.getElementById("ytplayer");
+
+    videoIds.forEach(id => {
+      const img = document.createElement("img");
+      img.src = `https://img.youtube.com/vi/${id}/0.jpg`;
+      img.alt = id;
+      img.onclick = () => {
+        player.src = `https://www.youtube.com/embed/${id}?autoplay=1`;
+        startRecognition();
+      };
+      sidebar.appendChild(img);
+    });
+
+    function stopVideo() {
+      player.src = "about:blank";
+      if (recognition) recognition.stop();
+    }
+
     let recognition;
-    let transcript = \"\";
-    let lastCapture = \"\";
+    let transcript = "";
+    let lastCapture = "";
 
     function startRecognition() {
       if (!('webkitSpeechRecognition' in window)) {
-        alert(\"Chromeで開いてください\");
+        alert("このブラウザでは音声認識が使えません（Chrome推奨）");
         return;
       }
 
+      if (recognition) {
+        recognition.onresult = null;
+        recognition.onerror = null;
+        recognition.onend = null;
+        recognition.stop();
+        recognition = null;
+      }
+
       recognition = new webkitSpeechRecognition();
-      recognition.lang = \"ja-JP\";
+      recognition.lang = "ja-JP";
       recognition.continuous = true;
       recognition.interimResults = true;
 
-      recognition.onresult = function(event) {
+      recognition.onresult = event => {
         for (let i = event.resultIndex; i < event.results.length; i++) {
           transcript = event.results[i][0].transcript.trim();
         }
-        document.getElementById(\"recognized\").textContent = \"🗣️ \" + transcript;
+        document.getElementById("recognized").textContent = "🗣️ " + transcript;
       };
 
-      recognition.onerror = (e) => console.error(\"認識エラー:\", e);
-      recognition.onend = () => {
-        console.log(\"認識が終了、再起動\");
-        startRecognition();
-      };
+      recognition.onerror = e => console.error("認識エラー:", e);
+      recognition.onend = () => startRecognition();
 
       recognition.start();
     }
 
-    document.getElementById(\"typingInput\").addEventListener(\"keydown\", function(e) {
-      if (e.key === \"Enter\") {
+    document.getElementById("typingInput").addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
         const input = this.value.trim();
         const correct = transcript.trim();
         let match = 0;
@@ -76,14 +147,12 @@
           if (input[i] === correct[i]) match++;
         }
         const rate = correct.length ? (match / correct.length * 100).toFixed(1) : 0;
-        const log = `🎯 一致率: ${rate}%\\n🎧 音声: ${correct}\\n⌨️ 入力: ${input}`;
-        const result = document.getElementById(\"resultList\");
-        result.textContent = `${log}\\n------------------------\\n` + result.textContent;
-        this.value = \"\";
+        const log = `🎯 一致率: ${rate}%\n🎧 音声: ${correct}\n⌨️ 入力: ${input}`;
+        const result = document.getElementById("resultList");
+        result.textContent = `${log}\n------------------------\n` + result.textContent;
+        this.value = "";
       }
     });
-
-    window.onload = startRecognition;
   </script>
 </body>
 </html>
