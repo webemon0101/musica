@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>発話→タイピング判定ゲーム</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; }
+    input, button { font-size: 18px; padding: 8px; width: 80%; margin: 5px 0; }
+    #spokenText, #timer, #result { font-size: 24px; margin: 10px 0; white-space: pre-wrap; }
+    #typingInput { font-size: 20px; width: 80%; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h1>🎙️ 発話→タイピング一致率ゲーム</h1>
+
+  <button onclick="startRecognition()">🎤 話す（開始）</button>
+  <button onclick="stopRecognition()">■ 認識停止</button>
+  <div id="spokenText">🗣️ 認識結果：</div>
+  <div id="timer">⌛ 制限時間: 10秒</div>
+  <input type="text" id="typingInput" placeholder="聞き取った言葉を入力" disabled><br>
+  <div id="result">💬 結果：</div>
+
+  <script>
+    let recognition;
+    let spokenExpected = "";
+    let timeLeft = 10;
+    let timerId;
+    let timedOut = false;
+
+    function startRecognition() {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert('このブラウザでは音声認識が使えません（Chrome推奨）');
+        return;
+      }
+
+      recognition = new webkitSpeechRecognition();
+      recognition.lang = "ja-JP";
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onresult = (event) => {
+        const text = event.results[0][0].transcript.trim();
+        document.getElementById("spokenText").textContent = "🗣️ 認識結果：" + text;
+        spokenExpected = text;
+        document.getElementById("typingInput").value = "";
+        document.getElementById("typingInput").disabled = false;
+        document.getElementById("typingInput").focus();
+        document.getElementById("result").textContent = "";
+        startTimer();
+      };
+
+      recognition.onerror = (event) => console.error("認識エラー:", event);
+      recognition.start();
+    }
+
+    function stopRecognition() {
+      if (recognition) recognition.stop();
+    }
+
+    function startTimer() {
+      timeLeft = 10;
+      timedOut = false;
+      document.getElementById("timer").textContent = `⌛ 制限時間: ${timeLeft}秒`;
+      clearInterval(timerId);
+      timerId = setInterval(() => {
+        timeLeft--;
+        document.getElementById("timer").textContent = `⌛ 制限時間: ${timeLeft}秒`;
+        if (timeLeft <= 0) {
+          clearInterval(timerId);
+          timedOut = true;
+          document.getElementById("typingInput").disabled = true;
+          checkResult();
+        }
+      }, 1000);
+    }
+
+    document.getElementById("typingInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        clearInterval(timerId);
+        document.getElementById("typingInput").disabled = true;
+        checkResult();
+      }
+    });
+
+    function checkResult() {
+      const typed = document.getElementById("typingInput").value.trim();
+      const original = spokenExpected.trim();
+      let match = 0;
+      const minLen = Math.min(typed.length, original.length);
+      for (let i = 0; i < minLen; i++) {
+        if (typed[i] === original[i]) match++;
+      }
+      const rate = original.length ? (match / original.length * 100).toFixed(1) : 0;
+      document.getElementById("result").textContent =
+        `📊 一致率: ${rate}%\n入力: ${typed}\n正解: ${original}`;
+    }
+  </script>
+</body>
+</html>

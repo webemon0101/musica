@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>YouTube字幕タイピング（マイク許可ガイド付き）</title>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #f8fbff, #e3edf7);
+      margin: 0;
+      display: flex;
+      height: 100vh;
+    }
+    #sidebar {
+      width: 200px;
+      background-color: #f0f4f8;
+      padding: 10px;
+      overflow-y: auto;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    }
+    #sidebar img {
+      width: 100%;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    #sidebar img:hover {
+      transform: scale(1.05);
+    }
+    #mainContent {
+      flex: 1;
+      padding: 20px;
+      text-align: center;
+    }
+    input, button {
+      font-size: 18px;
+      padding: 10px;
+      width: 80%;
+      max-width: 500px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #videoPlayer {
+      width: 640px;
+      height: 360px;
+      margin: 20px auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    #recognized, #resultList {
+      font-size: 18px;
+      margin: 20px auto;
+      width: 80%;
+      max-width: 640px;
+      text-align: left;
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      white-space: pre-wrap;
+    }
+    #typingInput {
+      font-size: 20px;
+      width: 80%;
+      max-width: 500px;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    #micNotice {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeeba;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 10px auto;
+      max-width: 600px;
+      text-align: left;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar"></div>
+
+  <div id="mainContent">
+    <h1>🎧 YouTube字幕タイピング練習</h1>
+    <div id="micNotice">
+      🔒 <strong>マイクの使用許可について:</strong><br>
+      このアプリは音声認識を使用します。ページ上部の「🔒鍵マーク」をクリックし、「マイク」→「許可」に設定してください。<br>
+      <em>（Chromeを推奨／HTTPSでの使用が必要です）</em>
+    </div>
+    <div id="videoPlayer"></div>
+    <div id="recognized">🗣️ 最新の認識結果：</div>
+    <input type="text" id="typingInput" placeholder="⌨️ 聞こえた言葉をここに入力し、Enterで判定"><br>
+    <div id="resultList">📋 結果一覧：</div>
+  </div>
+
+  <script>
+    const videoList = [
+      { id: 'M7lc1UVf-VE', title: 'YouTube Demo' },
+      { id: 'dQw4w9WgXcQ', title: 'RickRoll' },
+      { id: 'ScMzIvxBSi4', title: 'Relax Music' },
+      { id: 'Oezmni8SklA', title: 'Relax Music' },
+      { id: 'Jj1_mfUzjOs', title: 'Relax Music' },
+      { id: 'W-0lSiV-H7k', title: 'Relax Music' },
+    ];
+
+    let player;
+    let recognition;
+    let transcript = "";
+    let lastCapture = "";
+    let captureInterval;
+    let restartTimeout;
+
+    const sidebar = document.getElementById('sidebar');
+    videoList.forEach(video => {
+      const thumb = document.createElement('img');
+      thumb.src = `https://img.youtube.com/vi/${video.id}/0.jpg`;
+      thumb.title = video.title;
+      thumb.onclick = () => loadYouTube(video.id);
+      sidebar.appendChild(thumb);
+    });
+
+    function loadYouTube(videoId) {
+      if (!player) {
+        player = new YT.Player("videoPlayer", {
+          height: "360",
+          width: "640",
+          videoId: videoId,
+          events: {
+            onReady: () => {
+              player.playVideo();
+              startRecognition();
+            }
+          }
+        });
+      } else {
+        player.loadVideoById(videoId);
+        player.playVideo();
+        startRecognition();
+      }
+    }
+
+    function startRecognition() {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert('このブラウザでは音声認識が使えません（Chrome推奨）');
+        return;
+      }
+
+      if (recognition) {
+        recognition.stop();
+        recognition = null;
+      }
+
+      recognition = new webkitSpeechRecognition();
+      recognition.lang = "ja-JP";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onresult = (event) => {
+        let latest = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          latest = event.results[i][0].transcript.trim();
+        }
+        transcript = latest;
+      };
+
+      recognition.onerror = () => restartRecognition();
+      recognition.onend = () => restartRecognition();
+
+      recognition.start();
+
+      clearInterval(captureInterval);
+      captureInterval = setInterval(() => {
+        if (transcript && transcript !== lastCapture) {
+          lastCapture = transcript;
+          document.getElementById("recognized").textContent = "🗣️ 最新の認識結果：" + transcript;
+          document.getElementById("typingInput").value = "";
+          document.getElementById("typingInput").focus();
+        }
+      }, 3000);
+    }
+
+    function restartRecognition() {
+      if (recognition) try { recognition.stop(); } catch {}
+      recognition = null;
+      clearTimeout(restartTimeout);
+      restartTimeout = setTimeout(startRecognition, 1000);
+    }
+
+    document.getElementById("typingInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const userInput = e.target.value.trim();
+        const target = lastCapture;
+        let match = 0;
+        for (let i = 0; i < Math.min(userInput.length, target.length); i++) {
+          if (userInput[i] === target[i]) match++;
+        }
+        const rate = target.length ? (match / target.length * 100).toFixed(1) : 0;
+        const log = `🎯 一致率: ${rate}%\n🎧 音声: ${target}\n⌨️ 入力: ${userInput}`;
+        const resultEl = document.getElementById("resultList");
+        resultEl.textContent = `${log}\n-----------------------------\n` + resultEl.textContent;
+        e.target.value = "";
+      }
+    });
+  </script>
+</body>
+</html>

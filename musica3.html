@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>YouTube音声→タイピング一致率（スタイリッシュ版）</title>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #f0f4f8, #d9e2ec);
+      text-align: center;
+      padding: 30px;
+      color: #333;
+    }
+    h1 {
+      font-size: 28px;
+      margin-bottom: 20px;
+    }
+    input[type="text"], button {
+      font-size: 18px;
+      padding: 10px;
+      margin: 10px auto;
+      width: 80%;
+      max-width: 500px;
+      display: block;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 1px 1px 5px rgba(0,0,0,0.1);
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #videoPlayer {
+      width: 640px;
+      height: 360px;
+      margin: 30px auto;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      border-radius: 10px;
+    }
+    #recognized, #resultList {
+      font-size: 18px;
+      margin: 20px auto;
+      width: 80%;
+      max-width: 640px;
+      text-align: left;
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      white-space: pre-wrap;
+    }
+    #typingInput {
+      font-size: 20px;
+      width: 80%;
+      max-width: 500px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #aaa;
+      box-shadow: inset 1px 1px 3px rgba(0,0,0,0.05);
+    }
+  </style>
+</head>
+<body>
+  <h1>🎧 YouTube音声を聞いて入力！一致率チャレンジ（スタイリッシュ3秒更新）</h1>
+  <input type="text" id="youtubeUrl" placeholder="🎬 YouTubeのURLを入力してください"><br>
+  <button onclick="loadYouTube()">▶ 再生</button>
+  <div id="videoPlayer"></div>
+
+  <div id="recognized">🗣️ 最新の認識結果：</div>
+  <input type="text" id="typingInput" placeholder="⌨️ 聞こえた言葉をここに入力し、Enterで判定"><br>
+  <div id="resultList">📋 結果一覧：</div>
+
+  <script>
+    let player;
+    let recognition;
+    let transcript = "";
+    let lastCapture = "";
+    let captureInterval;
+    let restartTimeout;
+
+    function extractVideoId(url) {
+      const m = url.match(/(?:v=|youtu\.be\/|embed\/)([\w-]{11})/);
+      return m ? m[1] : null;
+    }
+
+    function loadYouTube() {
+      const url = document.getElementById("youtubeUrl").value.trim();
+      const videoId = extractVideoId(url);
+      if (!videoId) return alert("有効なURLを入力してください。");
+
+      if (!player) {
+        player = new YT.Player("videoPlayer", {
+          height: "360",
+          width: "640",
+          videoId: videoId,
+          events: {
+            onReady: () => {
+              player.playVideo();
+              startRecognition();
+            }
+          }
+        });
+      } else {
+        player.loadVideoById(videoId);
+        player.playVideo();
+        startRecognition();
+      }
+    }
+
+    function startRecognition() {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert('音声認識が使えません（Chrome推奨）');
+        return;
+      }
+
+      if (recognition) {
+        recognition.onresult = null;
+        recognition.onerror = null;
+        recognition.onend = null;
+        recognition.stop();
+        recognition = null;
+      }
+
+      recognition = new webkitSpeechRecognition();
+      recognition.lang = "ja-JP";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onresult = (event) => {
+        let latest = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          latest = event.results[i][0].transcript.trim();
+        }
+        transcript = latest;
+      };
+
+      recognition.onerror = (e) => {
+        console.warn("認識エラー:", e);
+        restartRecognition();
+      };
+
+      recognition.onend = () => {
+        console.warn("認識終了→再起動");
+        restartRecognition();
+      };
+
+      recognition.start();
+
+      clearInterval(captureInterval);
+      captureInterval = setInterval(() => {
+        if (transcript && transcript !== lastCapture) {
+          lastCapture = transcript;
+          document.getElementById("recognized").textContent = "🗣️ 最新の認識結果：" + transcript;
+          document.getElementById("typingInput").value = "";
+          document.getElementById("typingInput").focus();
+        }
+      }, 10000);
+    }
+
+    function restartRecognition() {
+      if (recognition) {
+        try { recognition.stop(); } catch (e) {}
+        recognition = null;
+      }
+      clearTimeout(restartTimeout);
+      restartTimeout = setTimeout(() => {
+        console.log("音声認識を再起動します...");
+        startRecognition();
+      }, 1000);
+    }
+
+    document.getElementById("typingInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const userInput = e.target.value.trim();
+        const target = lastCapture;
+        let match = 0;
+        for (let i = 0; i < Math.min(userInput.length, target.length); i++) {
+          if (userInput[i] === target[i]) match++;
+        }
+        const rate = target.length ? (match / target.length * 100).toFixed(1) : 0;
+        const log = `🎯 一致率: ${rate}%\n🎧 音声: ${target}\n⌨️ 入力: ${userInput}`;
+        const resultEl = document.getElementById("resultList");
+        resultEl.textContent = `${log}\n-----------------------------\n` + resultEl.textContent;
+        e.target.value = "";
+      }
+    });
+  </script>
+</body>
+</html>
